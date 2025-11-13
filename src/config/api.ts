@@ -8,9 +8,13 @@ export const api = {
     const token = localStorage.getItem('accessToken');
     
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>),
     };
+    
+    // Only set Content-Type if not already set (for FormData)
+    if (!headers['Content-Type'] && !(options.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+    }
     
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
@@ -30,10 +34,14 @@ export const api = {
     }
   },
   
-  async post(endpoint: string, data: any) {
+  async post(endpoint: string, data: any, options?: RequestInit) {
+    const isFormData = data instanceof FormData;
+    const body = isFormData ? data : JSON.stringify(data);
+    
     const response = await this.request(endpoint, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body,
+      ...options,
     });
     
     if (!response.ok) {
@@ -55,6 +63,38 @@ export const api = {
     }
     
     return response.json();
+  },
+  
+  async put(endpoint: string, data: any) {
+    const response = await this.request(endpoint, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Unknown error' }));
+      throw new Error(error.message || 'Request failed');
+    }
+    
+    return response.json();
+  },
+  
+  async delete(endpoint: string) {
+    const response = await this.request(endpoint, {
+      method: 'DELETE',
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Unknown error' }));
+      throw new Error(error.message || 'Request failed');
+    }
+    
+    // DELETE requests might not return a body
+    try {
+      return await response.json();
+    } catch {
+      return {};
+    }
   }
 };
 

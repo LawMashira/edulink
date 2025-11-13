@@ -1,31 +1,138 @@
-import React, { useState } from 'react';
-import { mockResults, mockSubjects } from '../../data/mockData';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
+import api from '../../config/api';
+import { toast } from 'react-toastify';
+
+interface Result {
+  id: string;
+  subjectId: string;
+  subject?: {
+    id: string;
+    name: string;
+    code: string;
+  };
+  marks: number;
+  maxMarks: number;
+  grade?: string;
+  term: string;
+  year: number;
+}
+
+interface Stats {
+  average: number;
+  overallGrade: string;
+  totalSubjects: number;
+}
 
 const MyResultsList: React.FC = () => {
-  const [selectedTerm, setSelectedTerm] = useState('Term 1');
-  const [selectedYear, setSelectedYear] = useState('2024');
+  const { user } = useAuth();
+  const [selectedTerm, setSelectedTerm] = useState<string>('');
+  const [selectedYear, setSelectedYear] = useState<string>('');
+  const [results, setResults] = useState<Result[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Filter results for current student (student1)
-  const myResults = mockResults.filter(result => result.studentId === 'student1');
-  
-  const filteredResults = myResults.filter(result => 
-    result.term === selectedTerm && result.year.toString() === selectedYear
-  );
+  // Set default values
+  useEffect(() => {
+    const currentYear = new Date().getFullYear().toString();
+    setSelectedYear(currentYear);
+    setSelectedTerm('Term 1');
+  }, []);
 
-  const getSubjectName = (subjectId: string) => {
-    const subject = mockSubjects.find(s => s.id === subjectId);
-    return subject ? subject.name : 'Unknown Subject';
+  // Fetch results when filters change
+  useEffect(() => {
+    if (selectedTerm && selectedYear && user?.role === 'STUDENT') {
+      fetchResults();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTerm, selectedYear, user]);
+
+  const fetchResults = async () => {
+    if (!selectedTerm || !selectedYear) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Build query params
+      const queryParams = new URLSearchParams();
+      if (selectedTerm) queryParams.append('term', selectedTerm);
+      if (selectedYear) queryParams.append('year', selectedYear);
+      
+      const response = await api.get(`/students/my-results?${queryParams.toString()}`);
+      
+      // Handle different response structures
+      if (response.stats && response.results) {
+        setStats(response.stats);
+        setResults(Array.isArray(response.results) ? response.results : []);
+      } else if (Array.isArray(response)) {
+        // If response is just an array, calculate stats
+        setResults(response);
+        calculateStats(response);
+      } else {
+        // Try to extract stats and results from response
+        const statsData = response.stats || {
+          average: response.average || 0,
+          overallGrade: response.overallGrade || 'N/A',
+          totalSubjects: response.totalSubjects || 0
+        };
+        const resultsData = response.results || response || [];
+        setStats(statsData);
+        setResults(Array.isArray(resultsData) ? resultsData : []);
+      }
+    } catch (err: any) {
+      console.error('Error fetching results:', err);
+      setError(err.message || 'Failed to fetch results');
+      setResults([]);
+      setStats(null);
+      toast.error(err.message || 'Failed to fetch results');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const calculateAverage = () => {
-    if (filteredResults.length === 0) return 0;
-    const totalMarks = filteredResults.reduce((sum, result) => sum + result.marks, 0);
-    const totalMaxMarks = filteredResults.reduce((sum, result) => sum + result.maxMarks, 0);
-    return totalMaxMarks > 0 ? Math.round((totalMarks / totalMaxMarks) * 100) : 0;
+  const calculateStats = (resultsData: Result[]) => {
+    if (resultsData.length === 0) {
+      setStats({
+        average: 0,
+        overallGrade: 'N/A',
+        totalSubjects: 0
+      });
+      return;
+    }
+
+    const totalMarks = resultsData.reduce((sum, result) => sum + result.marks, 0);
+    const totalMaxMarks = resultsData.reduce((sum, result) => sum + result.maxMarks, 0);
+    const average = totalMaxMarks > 0 ? Math.round((totalMarks / totalMaxMarks) * 100) : 0;
+    const overallGrade = getOverallGrade(average);
+
+    setStats({
+      average,
+      overallGrade,
+      totalSubjects: resultsData.length
+    });
+  };
+
+  const getOverallGrade = (average: number): string => {
+    if (average >= 90) return 'A+';
+    if (average >= 80) return 'A';
+    if (average >= 70) return 'B';
+    if (average >= 60) return 'C';
+    if (average >= 50) return 'D';
+    return 'F';
+  };
+
+  const getSubjectName = (result: Result) => {
+    if (result.subject) {
+      return result.subject.name;
+    }
+    return 'Unknown Subject';
   };
 
   const getGradeColor = (grade: string) => {
-    switch (grade) {
+    if (!grade) return 'bg-gray-100 text-gray-800';
+    switch (grade.toUpperCase()) {
       case 'A+':
       case 'A':
         return 'bg-green-100 text-green-800';
@@ -39,18 +146,6 @@ const MyResultsList: React.FC = () => {
         return 'bg-red-100 text-red-800';
     }
   };
-
-  const getOverallGrade = (average: number) => {
-    if (average >= 90) return 'A+';
-    if (average >= 80) return 'A';
-    if (average >= 70) return 'B';
-    if (average >= 60) return 'C';
-    if (average >= 50) return 'D';
-    return 'F';
-  };
-
-  const average = calculateAverage();
-  const overallGrade = getOverallGrade(average);
 
   return (
     <div className="space-y-6">
@@ -102,7 +197,7 @@ const MyResultsList: React.FC = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Average</p>
-                <p className="text-2xl font-bold text-gray-900">{average}%</p>
+                <p className="text-2xl font-bold text-gray-900">{stats?.average || 0}%</p>
               </div>
             </div>
           </div>
@@ -114,7 +209,7 @@ const MyResultsList: React.FC = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Overall Grade</p>
-                <p className="text-2xl font-bold text-gray-900">{overallGrade}</p>
+                <p className="text-2xl font-bold text-gray-900">{stats?.overallGrade || 'N/A'}</p>
               </div>
             </div>
           </div>
@@ -126,14 +221,28 @@ const MyResultsList: React.FC = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Subjects</p>
-                <p className="text-2xl font-bold text-gray-900">{filteredResults.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{stats?.totalSubjects || results.length || 0}</p>
               </div>
             </div>
           </div>
         </div>
 
+        {/* Loading State */}
+        {loading && (
+          <div className="text-center py-12">
+            <p className="text-gray-500">Loading results...</p>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && !loading && (
+          <div className="text-center py-12">
+            <p className="text-red-500">{error}</p>
+          </div>
+        )}
+
         {/* Results Table */}
-        {filteredResults.length > 0 ? (
+        {!loading && !error && results.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -156,12 +265,13 @@ const MyResultsList: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredResults.map((result) => {
+                {results.map((result) => {
                   const percentage = Math.round((result.marks / result.maxMarks) * 100);
+                  const grade = result.grade || getOverallGrade(percentage);
                   return (
                     <tr key={result.id}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {getSubjectName(result.subjectId)}
+                        {getSubjectName(result)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {result.marks}
@@ -173,8 +283,8 @@ const MyResultsList: React.FC = () => {
                         {percentage}%
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getGradeColor(result.grade)}`}>
-                          {result.grade}
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getGradeColor(grade)}`}>
+                          {grade}
                         </span>
                       </td>
                     </tr>
@@ -183,25 +293,25 @@ const MyResultsList: React.FC = () => {
               </tbody>
             </table>
           </div>
-        ) : (
+        ) : !loading && !error ? (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">📊</div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">No Results Found</h3>
             <p className="text-gray-600">No results available for the selected term and year.</p>
           </div>
-        )}
+        ) : null}
 
         {/* Performance Chart */}
-        {filteredResults.length > 0 && (
+        {!loading && !error && results.length > 0 && (
           <div className="mt-8 bg-gray-50 rounded-lg p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Performance Overview</h3>
             <div className="space-y-3">
-              {filteredResults.map((result) => {
+              {results.map((result) => {
                 const percentage = Math.round((result.marks / result.maxMarks) * 100);
                 return (
                   <div key={result.id} className="flex items-center">
                     <div className="w-32 text-sm font-medium text-gray-900">
-                      {getSubjectName(result.subjectId)}
+                      {getSubjectName(result)}
                     </div>
                     <div className="flex-1 mx-4">
                       <div className="w-full bg-gray-200 rounded-full h-2">

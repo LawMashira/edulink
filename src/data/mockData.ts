@@ -187,7 +187,9 @@ export const mockFees: Fee[] = [
   {
     id: 'fee1',
     studentId: 'student1',
+    schoolId: 'school1',
     amount: 150,
+    title: 'Term 1 Tuition Fee 2024',
     term: 'Term 1',
     year: 2024,
     dueDate: '2024-02-15',
@@ -196,7 +198,9 @@ export const mockFees: Fee[] = [
   {
     id: 'fee2',
     studentId: 'student2',
+    schoolId: 'school1',
     amount: 150,
+    title: 'Term 1 Tuition Fee 2024',
     term: 'Term 1',
     year: 2024,
     dueDate: '2024-02-15',
@@ -205,7 +209,9 @@ export const mockFees: Fee[] = [
   {
     id: 'fee3',
     studentId: 'student3',
+    schoolId: 'school1',
     amount: 150,
+    title: 'Term 1 Tuition Fee 2024',
     term: 'Term 1',
     year: 2024,
     dueDate: '2024-02-15',
@@ -214,7 +220,9 @@ export const mockFees: Fee[] = [
   {
     id: 'fee4',
     studentId: 'student4',
+    schoolId: 'school1',
     amount: 150,
+    title: 'Term 1 Tuition Fee 2024',
     term: 'Term 1',
     year: 2024,
     dueDate: '2024-02-15',
@@ -223,7 +231,9 @@ export const mockFees: Fee[] = [
   {
     id: 'fee5',
     studentId: 'student5',
+    schoolId: 'school1',
     amount: 150,
+    title: 'Term 1 Tuition Fee 2024',
     term: 'Term 1',
     year: 2024,
     dueDate: '2024-02-15',

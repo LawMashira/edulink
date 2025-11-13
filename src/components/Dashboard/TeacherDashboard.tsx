@@ -1,11 +1,58 @@
-import React from 'react';
-import { mockClasses, mockStudents, mockAttendance } from '../../data/mockData';
+import React, { useState, useEffect } from 'react';
+import api from '../../config/api';
+
+interface DashboardStats {
+  totalClasses?: number;
+  totalStudents?: number;
+  todayAttendance?: {
+    present: number;
+    total: number;
+  };
+  myClasses?: Array<{
+    id: string;
+    name: string;
+    stream: string;
+  }>;
+}
 
 const TeacherDashboard: React.FC = () => {
-  const myClasses = mockClasses.filter(cls => cls.teacherId === 'teacher1');
-  const totalStudents = mockStudents.length;
-  const todayAttendance = mockAttendance.filter(att => att.date === '2024-01-15');
-  const presentCount = todayAttendance.filter(att => att.status === 'present').length;
+  const [stats, setStats] = useState<DashboardStats>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setLoading(true);
+        const data = await api.get('/dashboard/stats');
+        setStats(data);
+        setError(null);
+      } catch (err: any) {
+        console.error('Error fetching dashboard stats:', err);
+        setError(err.message || 'Failed to fetch dashboard statistics');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-600">Loading dashboard...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+        <p className="text-red-800">Error: {error}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -20,7 +67,7 @@ const TeacherDashboard: React.FC = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">My Classes</p>
-                <p className="text-2xl font-bold text-gray-900">{myClasses.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.totalClasses || 0}</p>
               </div>
             </div>
           </div>
@@ -32,7 +79,7 @@ const TeacherDashboard: React.FC = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Total Students</p>
-                <p className="text-2xl font-bold text-gray-900">{totalStudents}</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.totalStudents || 0}</p>
               </div>
             </div>
           </div>
@@ -44,7 +91,9 @@ const TeacherDashboard: React.FC = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Today's Attendance</p>
-                <p className="text-2xl font-bold text-gray-900">{presentCount}/{totalStudents}</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {stats.todayAttendance ? `${stats.todayAttendance.present}/${stats.todayAttendance.total}` : '0/0'}
+                </p>
               </div>
             </div>
           </div>
@@ -55,19 +104,23 @@ const TeacherDashboard: React.FC = () => {
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">My Classes</h3>
           <div className="space-y-3">
-            {myClasses.map((cls) => (
-              <div key={cls.id} className="p-4 bg-gray-50 rounded-lg">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h4 className="font-medium text-gray-900">{cls.name}</h4>
-                    <p className="text-sm text-gray-600">{cls.stream}</p>
+            {stats.myClasses && stats.myClasses.length > 0 ? (
+              stats.myClasses.map((cls) => (
+                <div key={cls.id} className="p-4 bg-gray-50 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h4 className="font-medium text-gray-900">{cls.name}</h4>
+                      <p className="text-sm text-gray-600">{cls.stream}</p>
+                    </div>
+                    <button className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">
+                      View Class
+                    </button>
                   </div>
-                  <button className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">
-                    View Class
-                  </button>
                 </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-sm text-gray-500">No classes assigned</p>
+            )}
           </div>
         </div>
 

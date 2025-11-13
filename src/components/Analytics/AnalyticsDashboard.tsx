@@ -1,33 +1,53 @@
-import React from 'react';
-import { mockStudents, mockTeachers, mockClasses, mockAttendance, mockResults, mockFees } from '../../data/mockData';
+import React, { useState, useEffect } from 'react';
+import api from '../../config/api';
 
 const AnalyticsDashboard: React.FC = () => {
-  const totalStudents = mockStudents.length;
-  const totalTeachers = mockTeachers.length;
-  const totalClasses = mockClasses.length;
-  
-  const attendanceRate = mockAttendance.length > 0 
-    ? Math.round((mockAttendance.filter(att => att.status === 'present').length / mockAttendance.length) * 100)
-    : 0;
+  const [stats, setStats] = useState({
+    totalStudents: 0,
+    totalTeachers: 0,
+    totalClasses: 0,
+    attendanceRate: 0,
+    averageMarks: 0,
+    totalFees: 0,
+    paidFees: 0,
+    collectionRate: 0,
+    gradeDistribution: {} as Record<string, number>
+  });
+  const [loading, setLoading] = useState(true);
 
-  const averageMarks = mockResults.length > 0 
-    ? Math.round(mockResults.reduce((sum, result) => sum + result.marks, 0) / mockResults.length)
-    : 0;
+  useEffect(() => {
+    fetchAnalytics();
+  }, []);
 
-  const totalFees = mockFees.reduce((sum, fee) => sum + fee.amount, 0);
-  const paidFees = mockFees.filter(fee => fee.status === 'paid').reduce((sum, fee) => sum + fee.amount, 0);
-  const collectionRate = totalFees > 0 ? Math.round((paidFees / totalFees) * 100) : 0;
-
-  const getGradeDistribution = () => {
-    const grades = mockResults.map(result => result.grade);
-    const distribution = grades.reduce((acc, grade) => {
-      acc[grade] = (acc[grade] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-    return distribution;
+  const fetchAnalytics = async () => {
+    try {
+      setLoading(true);
+      const data = await api.get('/analytics');
+      setStats({
+        totalStudents: data.totalStudents || 0,
+        totalTeachers: data.totalTeachers || 0,
+        totalClasses: data.totalClasses || 0,
+        attendanceRate: data.attendanceRate || 0,
+        averageMarks: data.averageMarks || 0,
+        totalFees: data.totalFees || 0,
+        paidFees: data.paidFees || 0,
+        collectionRate: data.collectionRate || 0,
+        gradeDistribution: data.gradeDistribution || {}
+      });
+    } catch (err: any) {
+      console.error('Error fetching analytics:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const gradeDistribution = getGradeDistribution();
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-600">Loading analytics...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -43,7 +63,7 @@ const AnalyticsDashboard: React.FC = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Total Students</p>
-                <p className="text-2xl font-bold text-gray-900">{totalStudents}</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.totalStudents}</p>
               </div>
             </div>
           </div>
@@ -55,7 +75,7 @@ const AnalyticsDashboard: React.FC = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Teachers</p>
-                <p className="text-2xl font-bold text-gray-900">{totalTeachers}</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.totalTeachers}</p>
               </div>
             </div>
           </div>
@@ -67,7 +87,7 @@ const AnalyticsDashboard: React.FC = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Classes</p>
-                <p className="text-2xl font-bold text-gray-900">{totalClasses}</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.totalClasses}</p>
               </div>
             </div>
           </div>
@@ -80,7 +100,7 @@ const AnalyticsDashboard: React.FC = () => {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Avg per Class</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {totalClasses > 0 ? Math.round(totalStudents / totalClasses) : 0}
+                  {stats.totalClasses > 0 ? Math.round(stats.totalStudents / stats.totalClasses) : 0}
                 </p>
               </div>
             </div>
@@ -92,13 +112,13 @@ const AnalyticsDashboard: React.FC = () => {
           <div className="bg-white border border-gray-200 rounded-lg p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Attendance Performance</h3>
             <div className="text-center">
-              <div className="text-4xl font-bold text-blue-600 mb-2">{attendanceRate}%</div>
+              <div className="text-4xl font-bold text-blue-600 mb-2">{stats.attendanceRate}%</div>
               <p className="text-gray-600">Average Attendance Rate</p>
               <div className="mt-4">
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div 
                     className="bg-blue-600 h-2 rounded-full" 
-                    style={{ width: `${attendanceRate}%` }}
+                    style={{ width: `${stats.attendanceRate}%` }}
                   ></div>
                 </div>
               </div>
@@ -108,13 +128,13 @@ const AnalyticsDashboard: React.FC = () => {
           <div className="bg-white border border-gray-200 rounded-lg p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Academic Performance</h3>
             <div className="text-center">
-              <div className="text-4xl font-bold text-green-600 mb-2">{averageMarks}%</div>
+              <div className="text-4xl font-bold text-green-600 mb-2">{stats.averageMarks}%</div>
               <p className="text-gray-600">Average Marks</p>
               <div className="mt-4">
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div 
                     className="bg-green-600 h-2 rounded-full" 
-                    style={{ width: `${averageMarks}%` }}
+                    style={{ width: `${stats.averageMarks}%` }}
                   ></div>
                 </div>
               </div>
@@ -129,25 +149,25 @@ const AnalyticsDashboard: React.FC = () => {
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-gray-600">Total Fees</span>
-                <span className="font-semibold">${totalFees}</span>
+                <span className="font-semibold">${stats.totalFees}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-600">Collected</span>
-                <span className="font-semibold text-green-600">${paidFees}</span>
+                <span className="font-semibold text-green-600">${stats.paidFees}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-600">Outstanding</span>
-                <span className="font-semibold text-red-600">${totalFees - paidFees}</span>
+                <span className="font-semibold text-red-600">${stats.totalFees - stats.paidFees}</span>
               </div>
               <div className="mt-4">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm text-gray-600">Collection Rate</span>
-                  <span className="text-sm font-semibold">{collectionRate}%</span>
+                  <span className="text-sm font-semibold">{stats.collectionRate}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div 
                     className="bg-green-600 h-2 rounded-full" 
-                    style={{ width: `${collectionRate}%` }}
+                    style={{ width: `${stats.collectionRate}%` }}
                   ></div>
                 </div>
               </div>
@@ -157,14 +177,14 @@ const AnalyticsDashboard: React.FC = () => {
           <div className="bg-white border border-gray-200 rounded-lg p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Grade Distribution</h3>
             <div className="space-y-3">
-              {Object.entries(gradeDistribution).map(([grade, count]) => (
+              {Object.entries(stats.gradeDistribution).map(([grade, count]) => (
                 <div key={grade} className="flex justify-between items-center">
                   <span className="text-gray-600">Grade {grade}</span>
                   <div className="flex items-center space-x-2">
                     <div className="w-20 bg-gray-200 rounded-full h-2">
                       <div 
                         className="bg-blue-600 h-2 rounded-full" 
-                        style={{ width: `${(count / mockResults.length) * 100}%` }}
+                        style={{ width: `${Object.keys(stats.gradeDistribution).length > 0 ? (count / Object.values(stats.gradeDistribution).reduce((a, b) => a + b, 0)) * 100 : 0}%` }}
                       ></div>
                     </div>
                     <span className="text-sm font-semibold w-8">{count}</span>

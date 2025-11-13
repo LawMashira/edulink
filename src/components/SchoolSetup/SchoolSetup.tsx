@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
+import api from '../../config/api';
+import { toast } from 'react-toastify';
 
 const SchoolSetup: React.FC = () => {
+  const { user } = useAuth();
   const [schoolInfo, setSchoolInfo] = useState({
     name: '',
     address: '',
@@ -9,37 +13,190 @@ const SchoolSetup: React.FC = () => {
     logo: null as File | null
   });
 
-  const [classes, setClasses] = useState<Array<{name: string, stream: string}>>([]);
-  const [subjects, setSubjects] = useState<Array<{name: string, code: string}>>([]);
+  // Pre-populate school name from user's school info
+  useEffect(() => {
+    // If user has schoolId, fetch school info to pre-populate
+    if (user?.schoolId) {
+      fetchSchoolInfo();
+    } else if (user?.schoolName) {
+      // If school name is directly in user object, use it
+      setSchoolInfo(prev => ({
+        ...prev,
+        name: user.schoolName || prev.name
+      }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  const fetchSchoolInfo = async () => {
+    if (!user?.schoolId) return;
+
+    try {
+      const data = await api.get(`/schools/${user.schoolId}`);
+      setSchoolInfo(prev => ({
+        ...prev,
+        name: data.name || prev.name,
+        address: data.address || prev.address,
+        contact: data.contact || prev.contact,
+        email: data.email || prev.email
+      }));
+    } catch (err: any) {
+      console.error('Error fetching school info:', err);
+      // If school info can't be fetched, at least try to use schoolName from user object
+      if (user?.schoolName) {
+        setSchoolInfo(prev => ({
+          ...prev,
+          name: user.schoolName || prev.name
+        }));
+      }
+    }
+  };
+
+  const [classes, setClasses] = useState<Array<{id?: string, name: string, stream?: string, level?: string}>>([]);
+  const [subjects, setSubjects] = useState<Array<{id?: string, name: string, code: string}>>([]);
+  const [teachers, setTeachers] = useState<Array<{id: string, name: string, email: string}>>([]);
   const [showAddClass, setShowAddClass] = useState(false);
   const [showAddSubject, setShowAddSubject] = useState(false);
-  const [newClass, setNewClass] = useState({ name: '', stream: '' });
+  const [newClass, setNewClass] = useState({ name: '', level: '', teacherId: '', subjectId: '' });
   const [newSubject, setNewSubject] = useState({ name: '', code: '' });
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const handleSchoolSubmit = (e: React.FormEvent) => {
+  // Fetch existing classes and subjects on mount
+  useEffect(() => {
+    if (user?.schoolId) {
+      fetchClasses();
+      fetchSubjects();
+      fetchTeachers();
+    }
+    setLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  const fetchClasses = async () => {
+    try {
+      const data = await api.get('/classes');
+      setClasses(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Error fetching classes:', err);
+      setClasses([]);
+    }
+  };
+
+  const fetchSubjects = async () => {
+    try {
+      const data = await api.get('/subjects');
+      setSubjects(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Error fetching subjects:', err);
+      setSubjects([]);
+    }
+  };
+
+  const fetchTeachers = async () => {
+    try {
+      const data = await api.get('/teachers');
+      setTeachers(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Error fetching teachers:', err);
+      setTeachers([]);
+    }
+  };
+
+  const handleSchoolSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('School info:', schoolInfo);
-    alert('School information saved successfully!');
-  };
-
-  const handleAddClass = () => {
-    if (!newClass.name || !newClass.stream) {
-      alert('Please fill in all fields');
+    
+    if (!user?.schoolId) {
+      toast.error('School ID not found. Please ensure you are associated with a school.');
       return;
     }
-    setClasses([...classes, newClass]);
-    setNewClass({ name: '', stream: '' });
-    setShowAddClass(false);
+
+    try {
+      setSaving(true);
+      
+      // Update school information
+      const schoolData: any = {
+        name: schoolInfo.name,
+        address: schoolInfo.address,
+        email: schoolInfo.email
+      };
+
+      // If logo is a file, upload it separately
+      if (schoolInfo.logo) {
+        const formData = new FormData();
+        formData.append('logo', schoolInfo.logo);
+        
+        const token = localStorage.getItem('accessToken');
+        const response = await fetch(`${api.baseUrl}/schools/${user.schoolId}/logo`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        });
+
+        if (!response.ok && response.status !== 404) {
+          // Logo endpoint might not exist, that's okay
+          console.warn('Logo upload failed, continuing with school update');
+        }
+      }
+
+      // Update school information
+      await api.put(`/schools/${user.schoolId}`, schoolData);
+      
+      toast.success('School information saved successfully!');
+      fetchSchoolInfo(); // Refresh school info
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save school information');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleAddSubject = () => {
+  const handleAddClass = async () => {
+    if (!newClass.name || !newClass.level || !newClass.teacherId || !newClass.subjectId) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      // Try to create class via API
+      const data = await api.post('/classes', {
+        name: newClass.name,
+        level: newClass.level,
+        teacherId: newClass.teacherId,
+        subjectId: newClass.subjectId
+      });
+      
+      toast.success('Class added successfully!');
+      setNewClass({ name: '', level: '', teacherId: '', subjectId: '' });
+      setShowAddClass(false);
+      fetchClasses(); // Refresh classes list
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to add class. The classes endpoint may not be implemented yet.');
+    }
+  };
+
+  const handleAddSubject = async () => {
     if (!newSubject.name || !newSubject.code) {
-      alert('Please fill in all fields');
+      toast.error('Please fill in all fields');
       return;
     }
-    setSubjects([...subjects, newSubject]);
-    setNewSubject({ name: '', code: '' });
-    setShowAddSubject(false);
+
+    try {
+      // Try to create subject via API
+      const data = await api.post('/subjects', {
+        name: newSubject.name,
+        code: newSubject.code
+      });
+      
+      toast.success('Subject added successfully!');
+      setNewSubject({ name: '', code: '' });
+      setShowAddSubject(false);
+      fetchSubjects(); // Refresh subjects list
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to add subject. The subjects endpoint may not be implemented yet.');
+    }
   };
 
   return (
@@ -121,9 +278,10 @@ const SchoolSetup: React.FC = () => {
 
           <button
             type="submit"
-            className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={saving}
+            className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Save School Information
+            {saving ? 'Saving...' : 'Save School Information'}
           </button>
         </form>
       </div>
@@ -141,12 +299,18 @@ const SchoolSetup: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {classes.map((cls, index) => (
-            <div key={index} className="p-4 bg-gray-50 rounded-lg">
-              <h4 className="font-medium text-gray-900">{cls.name}</h4>
-              <p className="text-sm text-gray-600">{cls.stream}</p>
-            </div>
-          ))}
+          {loading ? (
+            <div className="col-span-full text-center py-4 text-gray-500">Loading classes...</div>
+          ) : classes.length > 0 ? (
+            classes.map((cls) => (
+              <div key={cls.id || cls.name} className="p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-medium text-gray-900">{cls.name}</h4>
+                <p className="text-sm text-gray-600">{cls.level || cls.stream}</p>
+              </div>
+            ))
+          ) : (
+            <div className="col-span-full text-center py-4 text-gray-500">No classes added yet</div>
+          )}
         </div>
       </div>
 
@@ -163,12 +327,18 @@ const SchoolSetup: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {subjects.map((subject, index) => (
-            <div key={index} className="p-4 bg-gray-50 rounded-lg">
-              <h4 className="font-medium text-gray-900">{subject.name}</h4>
-              <p className="text-sm text-gray-600">Code: {subject.code}</p>
-            </div>
-          ))}
+          {loading ? (
+            <div className="col-span-full text-center py-4 text-gray-500">Loading subjects...</div>
+          ) : subjects.length > 0 ? (
+            subjects.map((subject) => (
+              <div key={subject.id || subject.code} className="p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-medium text-gray-900">{subject.name}</h4>
+                <p className="text-sm text-gray-600">Code: {subject.code}</p>
+              </div>
+            ))
+          ) : (
+            <div className="col-span-full text-center py-4 text-gray-500">No subjects added yet</div>
+          )}
         </div>
       </div>
 
@@ -194,15 +364,54 @@ const SchoolSetup: React.FC = () => {
 
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Stream
+                  Level *
                 </label>
                 <input
                   type="text"
-                  value={newClass.stream}
-                  onChange={(e) => setNewClass({...newClass, stream: e.target.value})}
+                  value={newClass.level}
+                  onChange={(e) => setNewClass({...newClass, level: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., Science, Arts, Commercial"
+                  placeholder="e.g., Form 1, Form 2, Grade 1, etc."
+                  required
                 />
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Class Teacher *
+                </label>
+                <select
+                  value={newClass.teacherId}
+                  onChange={(e) => setNewClass({...newClass, teacherId: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Select a teacher</option>
+                  {teachers.map((teacher) => (
+                    <option key={teacher.id} value={teacher.id}>
+                      {teacher.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Subject *
+                </label>
+                <select
+                  value={newClass.subjectId}
+                  onChange={(e) => setNewClass({...newClass, subjectId: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Select a subject</option>
+                  {subjects.map((subject) => (
+                    <option key={subject.id} value={subject.id}>
+                      {subject.name} ({subject.code})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="flex justify-end space-x-3">

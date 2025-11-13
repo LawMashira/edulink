@@ -1,8 +1,37 @@
-import React, { useState } from 'react';
-import { mockStudents, mockSubjects, mockClasses } from '../../data/mockData';
+import React, { useState, useEffect } from 'react';
+import api from '../../config/api';
+import { toast } from 'react-toastify';
+
+interface Homework {
+  id: string;
+  title: string;
+  description: string;
+  subject?: string;
+  subjectId?: string;
+  class?: string;
+  classId?: string;
+  dueDate: string;
+  status: 'active' | 'completed';
+  submissions?: number;
+  totalStudents?: number;
+}
+
+interface Subject {
+  id: string;
+  name: string;
+}
+
+interface Class {
+  id: string;
+  name: string;
+}
 
 const HomeworkList: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [homework, setHomework] = useState<Homework[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [loading, setLoading] = useState(true);
   const [newHomework, setNewHomework] = useState({
     title: '',
     description: '',
@@ -12,62 +41,82 @@ const HomeworkList: React.FC = () => {
     file: null as File | null
   });
 
-  const mockHomework = [
-    {
-      id: 'hw1',
-      title: 'Mathematics Assignment',
-      description: 'Complete exercises 1-10 from chapter 5',
-      subject: 'Mathematics',
-      class: 'Form 4A',
-      dueDate: '2024-01-25',
-      status: 'active',
-      submissions: 8,
-      totalStudents: 12
-    },
-    {
-      id: 'hw2',
-      title: 'English Essay',
-      description: 'Write a 500-word essay on climate change',
-      subject: 'English',
-      class: 'Form 3B',
-      dueDate: '2024-01-28',
-      status: 'active',
-      submissions: 5,
-      totalStudents: 10
-    },
-    {
-      id: 'hw3',
-      title: 'Science Project',
-      description: 'Research and present on renewable energy',
-      subject: 'Science',
-      class: 'Form 4A',
-      dueDate: '2024-01-20',
-      status: 'completed',
-      submissions: 12,
-      totalStudents: 12
-    }
-  ];
+  useEffect(() => {
+    fetchHomework();
+    fetchSubjects();
+    fetchClasses();
+  }, []);
 
-  const handleAddHomework = () => {
+  const fetchHomework = async () => {
+    try {
+      setLoading(true);
+      const data = await api.get('/homework');
+      setHomework(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Error fetching homework:', err);
+      setHomework([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchSubjects = async () => {
+    try {
+      const data = await api.get('/subjects');
+      setSubjects(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Error fetching subjects:', err);
+    }
+  };
+
+  const fetchClasses = async () => {
+    try {
+      const data = await api.get('/classes');
+      setClasses(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Error fetching classes:', err);
+    }
+  };
+
+  const handleAddHomework = async () => {
     if (!newHomework.title || !newHomework.description || !newHomework.subjectId || !newHomework.classId || !newHomework.dueDate) {
-      alert('Please fill in all required fields');
+      toast.error('Please fill in all required fields');
       return;
     }
     
-    console.log('Adding homework:', newHomework);
-    alert('Homework assigned successfully!');
-    setShowAddModal(false);
-    setNewHomework({ title: '', description: '', subjectId: '', classId: '', dueDate: '', file: null });
+    try {
+      await api.post('/homework', {
+        title: newHomework.title,
+        description: newHomework.description,
+        subjectId: newHomework.subjectId,
+        classId: newHomework.classId,
+        dueDate: newHomework.dueDate
+      });
+      toast.success('Homework assigned successfully!');
+      setShowAddModal(false);
+      setNewHomework({ title: '', description: '', subjectId: '', classId: '', dueDate: '', file: null });
+      fetchHomework();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to assign homework');
+    }
   };
 
-  const getSubjectName = (subjectId: string) => {
-    const subject = mockSubjects.find(s => s.id === subjectId);
-    return subject ? subject.name : 'Unknown Subject';
+  const getSubjectName = (subjectId?: string, subjectName?: string) => {
+    if (subjectName) return subjectName;
+    if (subjectId) {
+      const subject = subjects.find(s => s.id === subjectId);
+      return subject ? subject.name : 'Unknown Subject';
+    }
+    return 'Unknown Subject';
   };
 
-  const getClassName = (classId: string) => {
-    const cls = mockClasses.find(c => c.id === classId);
-    return cls ? cls.name : 'Unknown Class';
+  const getClassName = (classId?: string, className?: string) => {
+    if (className) return className;
+    if (classId) {
+      const cls = classes.find(c => c.id === classId);
+      return cls ? cls.name : 'Unknown Class';
+    }
+    return 'Unknown Class';
   };
 
   return (
@@ -91,7 +140,7 @@ const HomeworkList: React.FC = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Total Assignments</p>
-                <p className="text-2xl font-bold text-gray-900">{mockHomework.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{homework.length}</p>
               </div>
             </div>
           </div>
@@ -103,7 +152,7 @@ const HomeworkList: React.FC = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Completed</p>
-                <p className="text-2xl font-bold text-gray-900">{mockHomework.filter(hw => hw.status === 'completed').length}</p>
+                <p className="text-2xl font-bold text-gray-900">{homework.filter(hw => hw.status === 'completed').length}</p>
               </div>
             </div>
           </div>
@@ -115,55 +164,68 @@ const HomeworkList: React.FC = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Active</p>
-                <p className="text-2xl font-bold text-gray-900">{mockHomework.filter(hw => hw.status === 'active').length}</p>
+                <p className="text-2xl font-bold text-gray-900">{homework.filter(hw => hw.status === 'active').length}</p>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="space-y-4">
-          {mockHomework.map((homework) => (
-            <div key={homework.id} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+        {loading ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500">Loading homework...</p>
+          </div>
+        ) : homework.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500">No homework assignments found</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {homework.map((hw) => (
+            <div key={hw.id} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">{homework.title}</h3>
-                  <p className="text-sm text-gray-600">{homework.description}</p>
+                  <h3 className="text-lg font-semibold text-gray-900">{hw.title}</h3>
+                  <p className="text-sm text-gray-600">{hw.description}</p>
                 </div>
                 <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                  homework.status === 'active' 
+                  hw.status === 'active' 
                     ? 'bg-yellow-100 text-yellow-800' 
                     : 'bg-green-100 text-green-800'
                 }`}>
-                  {homework.status}
+                  {hw.status}
                 </span>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div>
                   <p className="text-sm text-gray-600">Subject</p>
-                  <p className="font-medium">{homework.subject}</p>
+                  <p className="font-medium">{getSubjectName(hw.subjectId, hw.subject)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Class</p>
-                  <p className="font-medium">{homework.class}</p>
+                  <p className="font-medium">{getClassName(hw.classId, hw.class)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Due Date</p>
-                  <p className="font-medium">{homework.dueDate}</p>
+                  <p className="font-medium">{new Date(hw.dueDate).toLocaleDateString()}</p>
                 </div>
               </div>
 
               <div className="flex justify-between items-center">
                 <div className="flex items-center space-x-4">
-                  <span className="text-sm text-gray-600">
-                    Submissions: {homework.submissions}/{homework.totalStudents}
-                  </span>
-                  <div className="w-32 bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full" 
-                      style={{ width: `${(homework.submissions / homework.totalStudents) * 100}%` }}
-                    ></div>
-                  </div>
+                  {hw.submissions !== undefined && hw.totalStudents !== undefined && (
+                    <>
+                      <span className="text-sm text-gray-600">
+                        Submissions: {hw.submissions}/{hw.totalStudents}
+                      </span>
+                      <div className="w-32 bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full" 
+                          style={{ width: `${(hw.submissions / hw.totalStudents) * 100}%` }}
+                    >                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
                 <div className="flex space-x-2">
                   <button className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">
@@ -177,6 +239,7 @@ const HomeworkList: React.FC = () => {
             </div>
           ))}
         </div>
+        )}
       </div>
 
       {/* Add Homework Modal */}
@@ -223,7 +286,7 @@ const HomeworkList: React.FC = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Select subject</option>
-                    {mockSubjects.map((subject) => (
+                    {subjects.map((subject) => (
                       <option key={subject.id} value={subject.id}>
                         {subject.name}
                       </option>
@@ -240,7 +303,7 @@ const HomeworkList: React.FC = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Select class</option>
-                    {mockClasses.map((cls) => (
+                    {classes.map((cls) => (
                       <option key={cls.id} value={cls.id}>
                         {cls.name}
                       </option>

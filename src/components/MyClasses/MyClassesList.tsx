@@ -1,17 +1,107 @@
-import React from 'react';
-import { mockClasses, mockStudents, mockTeachers } from '../../data/mockData';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
+import api from '../../config/api';
+
+interface Class {
+  id: string;
+  name: string;
+  level?: string;
+  stream?: string;
+  teacherId: string;
+  teacher?: {
+    id: string;
+    name: string;
+  };
+  subjectId?: string;
+  subject?: {
+    id: string;
+    name: string;
+    code: string;
+  };
+}
+
+interface Student {
+  id: string;
+  name: string;
+  studentNumber: string;
+  classId: string;
+}
 
 const MyClassesList: React.FC = () => {
-  // Filter classes for the current teacher (teacher1)
-  const myClasses = mockClasses.filter(cls => cls.teacherId === 'teacher1');
+  const { user } = useAuth();
+  const [myClasses, setMyClasses] = useState<Class[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const getStudentsInClass = (classId: string) => {
-    return mockStudents.filter(student => student.classId === classId);
+  useEffect(() => {
+    if (user?.id) {
+      fetchMyClasses();
+      fetchStudents();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  const fetchMyClasses = async () => {
+    try {
+      setLoading(true);
+      // Try to use the teacher's classes endpoint first
+      if (user?.role === 'TEACHER') {
+        try {
+          const data = await api.get('/teachers/my-classes');
+          // Handle different response structures
+          if (Array.isArray(data)) {
+            setMyClasses(data);
+          } else if (data.classes && Array.isArray(data.classes)) {
+            setMyClasses(data.classes);
+          } else {
+            // Fallback: fetch all classes and filter by teacherId
+            const allClasses = await api.get('/classes');
+            const filtered = Array.isArray(allClasses) 
+              ? allClasses.filter((cls: Class) => cls.teacherId === user.id)
+              : [];
+            setMyClasses(filtered);
+          }
+        } catch (err: any) {
+          // Fallback: fetch all classes and filter by teacherId
+          console.warn('Teacher classes endpoint failed, filtering all classes:', err);
+          const allClasses = await api.get('/classes');
+          const filtered = Array.isArray(allClasses) 
+            ? allClasses.filter((cls: Class) => cls.teacherId === user?.id)
+            : [];
+          setMyClasses(filtered);
+        }
+      } else {
+        // For non-teachers, just fetch all classes
+        const data = await api.get('/classes');
+        setMyClasses(Array.isArray(data) ? data : []);
+      }
+    } catch (err: any) {
+      console.error('Error fetching classes:', err);
+      setMyClasses([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const getTeacherName = (teacherId: string) => {
-    const teacher = mockTeachers.find(t => t.id === teacherId);
-    return teacher ? teacher.name : 'Unknown Teacher';
+  const fetchStudents = async () => {
+    try {
+      const data = await api.get('/students');
+      setStudents(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Error fetching students:', err);
+      setStudents([]);
+    }
+  };
+
+  const getStudentsInClass = (classId: string) => {
+    return students.filter(student => student.classId === classId);
+  };
+
+  const getTeacherName = (cls: Class) => {
+    if (cls.teacher) {
+      return cls.teacher.name;
+    }
+    return 'Unknown Teacher';
   };
 
   return (
@@ -61,17 +151,26 @@ const MyClassesList: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {myClasses.map((cls) => {
-            const studentsInClass = getStudentsInClass(cls.id);
-            return (
-              <div key={cls.id} className="bg-gray-50 rounded-lg p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="text-xl font-semibold text-gray-900">{cls.name}</h3>
-                    <p className="text-sm text-gray-600">Stream: {cls.stream}</p>
-                    <p className="text-sm text-gray-600">Teacher: {getTeacherName(cls.teacherId)}</p>
-                  </div>
+        {loading ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500">Loading classes...</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {myClasses.length > 0 ? (
+              myClasses.map((cls) => {
+                const studentsInClass = getStudentsInClass(cls.id);
+                return (
+                  <div key={cls.id} className="bg-gray-50 rounded-lg p-6">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h3 className="text-xl font-semibold text-gray-900">{cls.name}</h3>
+                        <p className="text-sm text-gray-600">Level: {cls.level || cls.stream || 'N/A'}</p>
+                        {cls.subject && (
+                          <p className="text-sm text-gray-600">Subject: {cls.subject.name}</p>
+                        )}
+                        <p className="text-sm text-gray-600">Teacher: {getTeacherName(cls)}</p>
+                      </div>
                   <span className="inline-flex px-3 py-1 text-sm font-semibold rounded-full bg-blue-100 text-blue-800">
                     {studentsInClass.length} students
                   </span>
@@ -108,14 +207,14 @@ const MyClassesList: React.FC = () => {
                 </div>
               </div>
             );
-          })}
-        </div>
-
-        {myClasses.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">👥</div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Classes Assigned</h3>
-            <p className="text-gray-600">You haven't been assigned to any classes yet. Contact your school administrator.</p>
+          })
+        ) : (
+              <div className="col-span-full text-center py-12">
+                <div className="text-6xl mb-4">👥</div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Classes Assigned</h3>
+                <p className="text-gray-600">You haven't been assigned to any classes yet. Contact your school administrator.</p>
+              </div>
+            )}
           </div>
         )}
       </div>
